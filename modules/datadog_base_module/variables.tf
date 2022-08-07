@@ -1,5 +1,3 @@
-
-
 variable "datadog_api_key" {
   type        = string
   description = "Datadog application key for your team"
