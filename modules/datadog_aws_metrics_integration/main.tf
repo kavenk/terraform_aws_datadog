@@ -1,5 +1,34 @@
 
-# IAM policies and roles required for datadog integration
+module "secret_keys" {
+  source = "../datadog_base_module"
+  datadog_api_key = var.datadog_api_key 
+  datadog_app_key = var.datadog_app_key
+
+}
+
+# Configures metrics integration in Datadog
+resource "datadog_integration_aws" "aws_instance" {
+  account_id  = var.aws_account_id
+  role_name   = "DatadogAWSIntegrationRole"
+  host_tags   = ["team:${var.datadog_team_name}"]
+  filter_tags = ["datadog:true"] # only hosts with 'datadog:true' tag will be added ..Dont remove this line !!! 
+  excluded_regions = ["eu-east-1", "eu-west-2"]
+}
+
+module "iam_policies" {
+  source = "../datadog_aws_iam"
+  external_id = datadog_integration_aws.aws_instance.external_id
+
+}
+ 
+# Uncomment this if you want services to be monitored by datadog (service_name can be lambda,sqs,sns etc)
+// resource "datadog_integration_aws_tag_filter" "service_name_filter" {
+//   account_id     = var.aws_account_id
+//   namespace      = "service_name" # set service name for example: lambda
+//   tag_filter_str = "datadog:true"
+// }
+
+# IAM assume sts role
 data "aws_iam_policy_document" "datadog_aws_integration_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -12,7 +41,7 @@ data "aws_iam_policy_document" "datadog_aws_integration_assume_role" {
       test     = "StringEquals"
       variable = "sts:ExternalId"
  
-      values   = [ datadog_integration_aws.sandbox.external_id]
+      values = [ datadog_integration_aws.aws_instance.external_id ]
     }
   }
 }
@@ -98,21 +127,23 @@ data "aws_iam_policy_document" "datadog_aws_integration" {
 }
  
 resource "aws_iam_policy" "datadog_aws_integration" {
-  name          = "DatadogAWSIntegrationPolicy"
-  provider      = aws.target-account
-  policy        = data.aws_iam_policy_document.datadog_aws_integration.json
+  name      = "DatadogAWSIntegrationPolicy"
+  provider  = aws.target-account
+  policy    = data.aws_iam_policy_document.datadog_aws_integration.json
 }
  
 resource "aws_iam_role" "datadog_aws_integration" {
   name               = "DatadogAWSIntegrationRole"
-  provider           =  aws.target-account
+  provider           = aws.target-account
   description        = "Role for Datadog AWS Integration"
   assume_role_policy = data.aws_iam_policy_document.datadog_aws_integration_assume_role.json
 }
  
 resource "aws_iam_role_policy_attachment" "datadog_aws_integration" {
-  role          = aws_iam_role.datadog_aws_integration.name
-  provider      = aws.target-account
-  policy_arn    = aws_iam_policy.datadog_aws_integration.arn
+  role       = aws_iam_role.datadog_aws_integration.name
+  provider   = aws.target-account
+  policy_arn = aws_iam_policy.datadog_aws_integration.arn
 }
+ 
+
 
